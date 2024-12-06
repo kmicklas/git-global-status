@@ -76,13 +76,25 @@ fn scan(path: PathBuf) -> anyhow::Result<Option<Status>> {
 fn main() -> anyhow::Result<()> {
     let args: Args = Args::parse();
 
-    for entry in read_dir(args.root)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            if let Some(status) = scan(entry.path())? {
-                status.write(stdout())?;
+    let (send, recv) = std::sync::mpsc::channel();
+
+    std::thread::scope(move |s| {
+        for entry in read_dir(args.root)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                let send = send.clone();
+                s.spawn(move || send.send(scan(entry.path())));
             }
         }
+        Ok::<(), anyhow::Error>(())
+    })?;
+
+    for result in recv {
+        let Some(status) = result? else {
+            continue;
+        };
+
+        status.write(stdout())?;
     }
 
     Ok(())
