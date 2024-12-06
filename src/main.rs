@@ -37,7 +37,7 @@ fn scan(path: PathBuf) -> anyhow::Result<Option<Status>> {
     }?;
 
     // is_dirty fails if no HEAD
-    let dirty = !repo.head_id().is_ok() || repo.is_dirty()?;
+    let dirty = repo.head_id().is_err() || repo.is_dirty()?;
 
     let mut status = Status {
         path,
