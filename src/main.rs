@@ -6,8 +6,9 @@ use std::{
 };
 
 use clap::Parser;
+use colored::Colorize;
 
-#[derive(clap::Parser)]
+#[derive(Parser)]
 struct Args {
     #[arg(short = 'C', default_value = ".")]
     root: PathBuf,
@@ -94,19 +95,19 @@ fn main() -> anyhow::Result<()> {
     }
 
     for path in clean {
-        println!("{}", path.file_name().unwrap().to_str().unwrap());
+        println!("{}", path.file_name().unwrap().to_str().unwrap().green());
     }
     for (path, status) in dirty {
-        println!("{}", path.file_name().unwrap().to_str().unwrap());
+        println!("{}", path.file_name().unwrap().to_str().unwrap().red());
 
         if status.dirty {
-            println!("\tDIRTY");
+            println!("\t{}", "DIRTY".yellow());
         }
         for branch in status.untracked_branches {
-            println!("\tUNTRACKED {}", branch);
+            println!("\t{} {}", "UNTRACKED".blue(), branch);
         }
         for branch in status.unpushed_branches {
-            println!("\tUNPUSHED {}", branch);
+            println!("\t{} {}", "UNPUSHED".magenta(), branch);
         }
     }
 
