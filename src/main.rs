@@ -14,7 +14,7 @@ struct Args {
     root: PathBuf,
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 struct Status {
     dirty: bool,
     untracked_branches: Vec<String>,
@@ -23,7 +23,7 @@ struct Status {
 
 impl Status {
     fn is_clean(&self) -> bool {
-        !self.dirty && self.untracked_branches.is_empty() && self.unpushed_branches.is_empty()
+        self.eq(&Default::default())
     }
 }
 
