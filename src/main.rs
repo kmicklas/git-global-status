@@ -1,8 +1,8 @@
 use std::{
     borrow::Borrow,
+    collections::{BTreeMap, BTreeSet},
     fs::read_dir,
-    io::{self, stdout},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use clap::Parser;
@@ -15,40 +15,26 @@ struct Args {
 
 #[derive(Default)]
 struct Status {
-    path: PathBuf,
     dirty: bool,
     untracked_branches: Vec<String>,
     unpushed_branches: Vec<String>,
 }
 
 impl Status {
-    fn write<W: io::Write>(&self, mut out: W) -> io::Result<()> {
-        writeln!(out, "{}", self.path.file_name().unwrap().to_str().unwrap())?;
-        if self.dirty {
-            writeln!(out, "\tDIRTY")?;
-        }
-        for branch in &self.untracked_branches {
-            writeln!(out, "\tUNTRACKED {}", branch)?;
-        }
-        for branch in &self.unpushed_branches {
-            writeln!(out, "\tUNPUSHED {}", branch)?;
-        }
-        Ok(())
+    fn is_clean(&self) -> bool {
+        !self.dirty && self.untracked_branches.is_empty() && self.unpushed_branches.is_empty()
     }
 }
 
-fn scan(path: PathBuf) -> anyhow::Result<Option<Status>> {
-    let repo = match gix::open(&path) {
+fn scan(path: &Path) -> anyhow::Result<Option<Status>> {
+    let repo = match gix::open(path) {
         Err(gix::open::Error::NotARepository { .. }) => return Ok(None),
         r => r,
     }?;
 
-    // is_dirty fails if no HEAD
-    let dirty = repo.head_id().is_err() || repo.is_dirty()?;
-
     let mut status = Status {
-        path,
-        dirty,
+        // is_dirty fails if no HEAD
+        dirty: repo.head_id().is_err() || repo.is_dirty()?,
         ..Default::default()
     };
 
@@ -83,18 +69,45 @@ fn main() -> anyhow::Result<()> {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
                 let send = send.clone();
-                s.spawn(move || send.send(scan(entry.path())));
+                let path = entry.path();
+                s.spawn(move || match scan(path.as_path()) {
+                    Ok(None) => {}
+                    Ok(Some(status)) => send.send(Ok((path, status))).unwrap(),
+                    Err(e) => send.send(Err(e)).unwrap(),
+                });
             }
         }
         Ok::<(), anyhow::Error>(())
     })?;
 
-    for result in recv {
-        let Some(status) = result? else {
-            continue;
-        };
+    let mut clean = BTreeSet::new();
+    let mut dirty = BTreeMap::new();
 
-        status.write(stdout())?;
+    for status in recv {
+        let (path, status) = status?;
+
+        if status.is_clean() {
+            clean.insert(path);
+        } else {
+            dirty.insert(path, status);
+        }
+    }
+
+    for path in clean {
+        println!("{}", path.file_name().unwrap().to_str().unwrap());
+    }
+    for (path, status) in dirty {
+        println!("{}", path.file_name().unwrap().to_str().unwrap());
+
+        if status.dirty {
+            println!("\tDIRTY");
+        }
+        for branch in status.untracked_branches {
+            println!("\tUNTRACKED {}", branch);
+        }
+        for branch in status.unpushed_branches {
+            println!("\tUNPUSHED {}", branch);
+        }
     }
 
     Ok(())
