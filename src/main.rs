@@ -1,10 +1,17 @@
 use std::{
     borrow::Borrow,
-    env::current_dir,
     fs::read_dir,
     io::{self, stdout},
     path::PathBuf,
 };
+
+use clap::Parser;
+
+#[derive(clap::Parser)]
+struct Args {
+    #[arg(short = 'C', default_value = ".")]
+    root: PathBuf,
+}
 
 #[derive(Default)]
 struct Status {
@@ -67,9 +74,9 @@ fn scan(path: PathBuf) -> anyhow::Result<Option<Status>> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let root = current_dir()?;
+    let args: Args = Args::parse();
 
-    for entry in read_dir(root)? {
+    for entry in read_dir(args.root)? {
         let entry = entry?;
         if entry.file_type()?.is_dir() {
             if let Some(status) = scan(entry.path())? {
