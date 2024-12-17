@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context as _;
 use clap::Parser;
 use colored::Colorize;
 
@@ -46,11 +47,26 @@ fn scan(path: &Path) -> anyhow::Result<Option<Status>> {
         if let Some(upstream) = branch.remote_tracking_ref_name(gix::remote::Direction::Push) {
             let upstream = upstream?;
             let upstream: &gix::refs::FullNameRef = upstream.borrow();
-            let upstream = repo.find_reference(upstream)?;
 
-            // TODO: distinguish unpushed from unpulled
-            if branch.id() != upstream.id() {
-                status.unpushed_branches.push(name.to_string());
+            match repo.find_reference(upstream) {
+                Ok(upstream) => {
+                    // TODO: distinguish unpushed from unpulled
+                    if branch.id() != upstream.id() {
+                        status.unpushed_branches.push(name.to_string());
+                    }
+                }
+                Err(gix::reference::find::existing::Error::NotFound { .. }) => {
+                    status.untracked_branches.push(name.to_string())
+                }
+                Err(e) => {
+                    return Err(e).with_context(|| {
+                        format!(
+                            "failed to find upstream of branch {} in repo {}",
+                            name,
+                            path.display(),
+                        )
+                    })
+                }
             }
         } else {
             status.untracked_branches.push(name.to_string());
