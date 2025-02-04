@@ -46,7 +46,9 @@ fn scan(path: &Path) -> anyhow::Result<Option<Status>> {
         // TODO: why doesn't `?` work here?
         let branch = branch.expect("valid reference");
         let name = branch.name().shorten();
-        if let Some(upstream) = branch.remote_tracking_ref_name(gix::remote::Direction::Push) {
+        if let Some(upstream) =
+            branch.remote_tracking_ref_name(gix::remote::Direction::Push)
+        {
             let upstream = upstream?;
             let upstream: &gix::refs::FullNameRef = upstream.borrow();
 
@@ -57,9 +59,9 @@ fn scan(path: &Path) -> anyhow::Result<Option<Status>> {
                         status.unpushed_branches.push(name.to_string());
                     }
                 }
-                Err(gix::reference::find::existing::Error::NotFound { .. }) => {
-                    status.untracked_branches.push(name.to_string())
-                }
+                Err(gix::reference::find::existing::Error::NotFound {
+                    ..
+                }) => status.untracked_branches.push(name.to_string()),
                 Err(e) => {
                     return Err(e).with_context(|| {
                         format!(
