@@ -34,11 +34,16 @@ fn scan(path: &Path) -> anyhow::Result<Option<Status>> {
         r => r,
     }?;
 
+    let mut dirty = repo
+        .status(gix::progress::Discard)?
+        .into_index_worktree_iter([])?
+        .collect::<Result<Vec<_>, _>>()?;
+    dirty.sort_by(|a, b| {
+        (a.rela_path(), a.summary()).cmp(&(b.rela_path(), b.summary()))
+    });
+
     let mut status = Status {
-        dirty: repo
-            .status(gix::progress::Discard)?
-            .into_index_worktree_iter([])?
-            .collect::<Result<Vec<_>, _>>()?,
+        dirty,
         ..Default::default()
     };
 
