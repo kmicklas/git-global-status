@@ -51,22 +51,31 @@ fn scan(path: &Path) -> anyhow::Result<Option<Status>> {
         // TODO: why doesn't `?` work here?
         let branch = branch.expect("valid reference");
         let name = branch.name().shorten();
-        if let Some(upstream) =
-            branch.remote_tracking_ref_name(gix::remote::Direction::Push)
+
+        let mut pushed: Option<bool> = None;
+
+        for direction in
+            [gix::remote::Direction::Fetch, gix::remote::Direction::Push]
         {
+            let Some(upstream) = branch.remote_tracking_ref_name(direction)
+            else {
+                continue;
+            };
             let upstream = upstream?;
             let upstream: &gix::refs::FullNameRef = upstream.borrow();
 
+            pushed = Some(false);
+
             match repo.find_reference(upstream) {
                 Ok(upstream) => {
-                    // TODO: distinguish unpushed from unpulled
-                    if branch.id() != upstream.id() {
-                        status.unpushed_branches.push(name.to_string());
+                    if branch.id() == upstream.id() {
+                        pushed = Some(true);
+                        break;
                     }
                 }
                 Err(gix::reference::find::existing::Error::NotFound {
                     ..
-                }) => status.untracked_branches.push(name.to_string()),
+                }) => {}
                 Err(e) => {
                     return Err(e).with_context(|| {
                         format!(
@@ -77,8 +86,12 @@ fn scan(path: &Path) -> anyhow::Result<Option<Status>> {
                     })
                 }
             }
-        } else {
-            status.untracked_branches.push(name.to_string());
+        }
+
+        match pushed {
+            None => status.untracked_branches.push(name.to_string()),
+            Some(false) => status.unpushed_branches.push(name.to_string()),
+            Some(true) => {}
         }
     }
 
