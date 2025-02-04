@@ -15,9 +15,9 @@ struct Args {
     root: PathBuf,
 }
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, PartialEq)]
 struct Status {
-    dirty: bool,
+    dirty: Vec<gix::status::index_worktree::Item>,
     untracked_branches: Vec<String>,
     unpushed_branches: Vec<String>,
 }
@@ -35,8 +35,10 @@ fn scan(path: &Path) -> anyhow::Result<Option<Status>> {
     }?;
 
     let mut status = Status {
-        // is_dirty fails if no HEAD
-        dirty: repo.head_id().is_err() || repo.is_dirty()?,
+        dirty: repo
+            .status(gix::progress::Discard)?
+            .into_index_worktree_iter([])?
+            .collect::<Result<Vec<_>, _>>()?,
         ..Default::default()
     };
 
@@ -116,8 +118,25 @@ fn main() -> anyhow::Result<()> {
     for (path, status) in dirty {
         println!("{}", path.file_name().unwrap().to_str().unwrap().red());
 
-        if status.dirty {
-            println!("\t{}", "DIRTY".yellow());
+        for item in status.dirty {
+            use gix::status::index_worktree::iter::Summary;
+            println!(
+                "\t{} {}",
+                match item.summary() {
+                    Some(s) => match s {
+                        Summary::Removed => "D".red(),
+                        Summary::Added => "A".green(),
+                        Summary::Modified => "M".yellow(),
+                        Summary::TypeChange => "T".yellow(),
+                        Summary::Renamed => "R".blue(),
+                        Summary::Copied => "C".magenta(),
+                        Summary::IntentToAdd => "A".bright_green(),
+                        Summary::Conflict => "X".red(),
+                    },
+                    None => "?".into(),
+                },
+                item.rela_path(),
+            );
         }
         for branch in status.untracked_branches {
             println!("\t{} {}", "UNTRACKED".blue(), branch);
