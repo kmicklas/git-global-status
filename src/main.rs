@@ -6,13 +6,22 @@ use std::{
 };
 
 use anyhow::Context as _;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use colored::Colorize;
+
+#[derive(Clone, ValueEnum)]
+enum Filter {
+    Dirty,
+    Clean,
+}
 
 #[derive(Parser)]
 struct Args {
     #[arg(short = 'C', default_value = ".")]
     root: PathBuf,
+
+    #[arg(short = 'f', long)]
+    filter: Option<Filter>,
 }
 
 #[derive(Default, PartialEq)]
@@ -130,6 +139,23 @@ fn main() -> anyhow::Result<()> {
         } else {
             dirty.insert(path, status);
         }
+    }
+
+    if let Some(filter) = args.filter {
+        match filter {
+            Filter::Clean => {
+                for path in clean {
+                    println!("{}", path.file_name().unwrap().to_str().unwrap());
+                }
+            }
+            Filter::Dirty => {
+                for path in dirty.keys() {
+                    println!("{}", path.file_name().unwrap().to_str().unwrap());
+                }
+            }
+        }
+
+        return Ok(());
     }
 
     for path in clean {
